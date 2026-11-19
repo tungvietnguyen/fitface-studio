@@ -45,6 +45,9 @@ import dev.fitface.studio.core.data.FontSpriteRenderer
 import dev.fitface.studio.core.data.FontSpriteSheet
 import dev.fitface.studio.core.model.EditorSnapshot
 import dev.fitface.studio.core.model.WidgetGuide
+import dev.fitface.studio.core.model.drawLeft
+import dev.fitface.studio.core.model.drawTop
+import dev.fitface.studio.core.model.visualBounds
 import dev.fitface.studio.core.ui.FitButton
 import dev.fitface.studio.core.ui.FitButtonStyle
 import dev.fitface.studio.core.ui.FitChip
@@ -166,7 +169,7 @@ internal fun FontWidgetsSheet(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (snapshot.widgets.isNotEmpty()) {
-                FitHeading(stringResource(R.string.editor_fonts_layers))
+                FitHeading(stringResource(R.string.editor_fonts_layers), info = null)
                 Row(
                     Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -198,7 +201,7 @@ internal fun FontWidgetsSheet(
 
             when (selectedTab) {
                 0 -> {
-                    FitHeading(stringResource(R.string.editor_fonts_picker))
+                    FitHeading(stringResource(R.string.editor_fonts_picker), info = null)
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
