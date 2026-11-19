@@ -116,12 +116,9 @@ jobs:
             signing="**Signed with a throwaway key** — it cannot be installed over an existing copy, and uninstalling first deletes every saved project."
           fi
 
-          body=$(cat <<'EOF'
-          A personal, experimental project for hardware you own — not a product, and not supported. It links two proprietary accessory SDK JARs, fetched at build time and verified against pinned hashes, and grants no rights in that SDK: see [`NOTICE.md`](../main/NOTICE.md).
-
-          Read [Installing to the watch](../main/README.md#installing-to-the-watch) before you send anything to a watch.
-          EOF
-          )
+          body=$(printf '%s\n\n%s' \
+            'A personal, experimental project for hardware you own — not a product, and not supported. It links two proprietary accessory SDK JARs, fetched at build time and verified against pinned hashes, and grants no rights in that SDK: see [`NOTICE.md`](../main/NOTICE.md).' \
+            'Read [Installing to the watch](../main/README.md#installing-to-the-watch) before you send anything to a watch.')
 
           gh release create "$GITHUB_REF_NAME" "$APK" \
             --title "$GITHUB_REF_NAME" \
