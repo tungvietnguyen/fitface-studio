@@ -1,8 +1,8 @@
 name: Build APK
 
-# Builds the debug APK on a version tag and publishes it as a GitHub Release, which
-# keeps it indefinitely — a workflow artifact expires after 90 days at most. Manual
-# runs build the same APK but publish nothing; the artifact is the only output there.
+# Builds the debug APK on main pushes, version tags and manual runs. Version tags
+# publish a GitHub Release, which keeps the APK indefinitely; other runs publish an
+# artifact that expires after 90 days at most.
 #
 # Debug, not release: release signing credentials are deliberately not stored in this
 # repository, and an unsigned release APK cannot be installed by anyone. The debug key
@@ -17,6 +17,8 @@ name: Build APK
 
 on:
   push:
+    branches:
+      - main
     tags:
       - "v*"
   workflow_dispatch:
@@ -51,18 +53,21 @@ jobs:
           KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.DEBUG_KEYSTORE_PASSWORD }}
         run: |
+          path=""
           if [ -z "$KEYSTORE_BASE64" ]; then
             echo "::warning title=No debug keystore::DEBUG_KEYSTORE_BASE64 is not set. This APK is signed with a throwaway key and cannot be installed over any other build. See docs/development.md."
-            exit 0
+          else
+            path="$RUNNER_TEMP/debug.keystore"
+            printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$path"
+            # Fails the run early on a truncated or mis-encoded secret, rather than letting
+            # Gradle report it as an opaque signing error. The printed fingerprint is public
+            # certificate data, and is the quickest way to confirm which key CI is using.
+            if [ -n "$path" ]; then
+              keytool -list -v -keystore "$path" -storepass "${KEYSTORE_PASSWORD:-android}" \
+                | grep -E 'Alias name|SHA256:'
+              echo "path=$path" >> "$GITHUB_OUTPUT"
+            fi
           fi
-          path="$RUNNER_TEMP/debug.keystore"
-          printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$path"
-          # Fails the run early on a truncated or mis-encoded secret, rather than letting
-          # Gradle report it as an opaque signing error. The printed fingerprint is public
-          # certificate data, and is the quickest way to confirm which key CI is using.
-          keytool -list -v -keystore "$path" -storepass "${KEYSTORE_PASSWORD:-android}" \
-            | grep -E 'Alias name|SHA256:'
-          echo "path=$path" >> "$GITHUB_OUTPUT"
 
       # Also runs :core:delivery:fetchAccessorySdk, which downloads both accessory SDK
       # JARs into libs/ and fails the build if either does not match its pinned SHA-256.
@@ -85,8 +90,7 @@ jobs:
           mv app/build/outputs/apk/debug/app-debug.apk "$name"
           echo "apk=$name" >> "$GITHUB_OUTPUT"
 
-      # Kept for manual runs, which publish no Release. On a tag this duplicates the
-      # Release asset, and expires after 90 days — the GitHub Actions maximum.
+      # On non-tag runs this is the build output; tag runs also attach it to the Release.
       - name: Upload the APK to the workflow run
         uses: actions/upload-artifact@v4
         with:

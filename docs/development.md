@@ -232,7 +232,8 @@ then signed with a throwaway key and cannot be installed over any other build. N
 that this is a **debug** signing key and confers nothing: it is not a release key, and
 anyone holding it can produce an APK a device will accept as an update.
 
-The release workflow builds the debug APK; it does not run the test suite. A `v*`
-tag publishes a GitHub prerelease; a manual run uploads a build artifact retained
-for 90 days. Preserve the key across releases. See [CONTRIBUTING](../CONTRIBUTING.md)
-for review conventions; do not store secret values in repository or local notes.
+The release workflow builds the debug APK on pushes to `main`, `v*` tags and manual
+runs; it does not run the test suite. A `v*` tag publishes a GitHub prerelease;
+main-branch pushes and manual runs upload a build artifact retained for 90 days.
+Preserve the key across releases. See [CONTRIBUTING](../CONTRIBUTING.md) for review
+conventions; do not store secret values in repository or local notes.
