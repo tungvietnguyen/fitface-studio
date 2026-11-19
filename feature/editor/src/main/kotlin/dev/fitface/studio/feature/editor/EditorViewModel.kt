@@ -42,8 +42,7 @@ import dev.fitface.studio.core.model.WidgetGuide
 import dev.fitface.studio.core.model.WidgetResizeStepPercent
 import dev.fitface.studio.core.model.drawLeft
 import dev.fitface.studio.core.model.drawTop
-import dev.fitface.studio.core.model.nextWidgetSize
-import dev.fitface.studio.core.model.widgetSizePercent
+import java.io.File
 import java.util.UUID
 import javax.inject.Inject
 import java.util.concurrent.atomic.AtomicLong
@@ -1215,27 +1214,43 @@ class EditorViewModel @Inject constructor(
 
     /** Decodes a picked picture and starts placing it, centred, at its default size. */
     fun preparePicture(uri: String) {
-        val snapshot = mutableState.value.snapshot ?: return
+        preparePicture(uri, deleteSourceAfterRead = null)
+    }
+
+    /** Prepares an app-generated PNG using the same bounded picture path, then removes its scratch file. */
+    fun prepareGeneratedPicture(file: File) {
+        preparePicture(file.toURI().toString(), deleteSourceAfterRead = file)
+    }
+
+    private fun preparePicture(uri: String, deleteSourceAfterRead: File?) {
+        val snapshot = mutableState.value.snapshot ?: run {
+            deleteSourceAfterRead?.delete()
+            return
+        }
         viewModelScope.launch {
             mutableState.value = mutableState.value.copy(isWorking = true, error = null)
-            runCatching { repository.preparePicture(uri, snapshot.projectId, snapshot.selectedVariant.basename) }
-                .onSuccess { prepared ->
-                    val start = prepared.defaultSize
-                    if (start == null) {
-                        repository.releasePicture(prepared.handle)
-                        showFailure(WatchFaceException("This picture is too small to add."))
-                        return@onSuccess
+            try {
+                runCatching { repository.preparePicture(uri, snapshot.projectId, snapshot.selectedVariant.basename) }
+                    .onSuccess { prepared ->
+                        val start = prepared.defaultSize
+                        if (start == null) {
+                            repository.releasePicture(prepared.handle)
+                            showFailure(WatchFaceException("This picture is too small to add."))
+                            return@onSuccess
+                        }
+                        mutableState.value.pendingPicture?.let { previous ->
+                            if (previous.prepared.handle != prepared.handle) repository.releasePicture(previous.prepared.handle)
+                        }
+                        mutableState.value = mutableState.value.copy(
+                            pendingPicture = PendingPicture(prepared, start.percent / 100f,
+                                snapshot.preview.width / 2f, snapshot.preview.height / 2f),
+                            isWorking = false,
+                        )
                     }
-                    mutableState.value.pendingPicture?.let { previous ->
-                        if (previous.prepared.handle != prepared.handle) repository.releasePicture(previous.prepared.handle)
-                    }
-                    mutableState.value = mutableState.value.copy(
-                        pendingPicture = PendingPicture(prepared, start.percent / 100f,
-                            snapshot.preview.width / 2f, snapshot.preview.height / 2f),
-                        isWorking = false,
-                    )
-                }
-                .onFailure(::showFailure)
+                    .onFailure(::showFailure)
+            } finally {
+                deleteSourceAfterRead?.delete()
+            }
         }
     }
 
@@ -1667,10 +1682,6 @@ class EditorViewModel @Inject constructor(
     }
 
     /**
-     * Steps the selected widget one rung along its resize ladder — see [widgetResizeLadder]
-     * for why the sizes come from a ladder rather than from scaling what is on screen.
-     */
-    /**
      * One rung of the selected widget's resize ladder. A step that arrives while an edit is
      * saving is dropped rather than run against the snapshot it would replace: a held − or +
      * keeps stepping, each step from the size the last one left.
@@ -1682,20 +1693,72 @@ class EditorViewModel @Inject constructor(
             it.globalIndex == mutableState.value.selectedWidgetIndex
         } ?: return
         if (!selected.canResize) return
-        val next = nextWidgetSize(selected, grow) ?: return
+        val next = nextWidgetSizeOnFace(
+            selected,
+            grow,
+            snapshot.preview.width,
+            snapshot.preview.height,
+        ) ?: return
         if (next.width == selected.width && next.height == selected.height) return
+        resizeSelectedWidgetToPercent(next.percentOfOriginal, mutableState.value.applyWidgetEditsToAllStyles)
+    }
+
+    /**
+     * Resizes on the pristine 5% ladder and keeps the complete drawn bounds on the selected
+     * panel. The resize and corrective move share an undo group.
+     */
+    fun resizeSelectedWidgetToPercent(percent: Int) {
+        resizeSelectedWidgetToPercent(
+            percent,
+            applyToAllStyles = mutableState.value.applyWidgetEditsToAllStyles,
+        )
+    }
+
+    private fun resizeSelectedWidgetToPercent(percent: Int, applyToAllStyles: Boolean) {
+        val current = mutableState.value
+        if (current.isWorking) return
+        val snapshot = current.snapshot ?: return
+        val selected = snapshot.widgets.singleOrNull { it.globalIndex == current.selectedWidgetIndex } ?: return
+        if (!selected.canResize || !selected.canEditPosition) return
+        val size = widgetResizeOptions(selected, snapshot.preview.width, snapshot.preview.height)
+            .singleOrNull { it.percentOfOriginal == percent } ?: return
+        if (size.width == selected.width && size.height == selected.height) return
+        val style = snapshot.selectedVariant.basename
+        val group = EditGroups.next()
         operate {
-            repository.resizeWidget(
-                styleName = snapshot.selectedVariant.basename,
+            val resized = repository.resizeWidget(
+                styleName = style,
                 globalIndex = selected.globalIndex,
                 widgetType = selected.type,
                 sequenceId = selected.sequenceId,
                 x = selected.x,
                 y = selected.y,
-                width = next.width,
-                height = next.height,
-                applyToAllStyles = mutableState.value.applyWidgetEditsToAllStyles,
+                width = size.width,
+                height = size.height,
+                applyToAllStyles = applyToAllStyles,
+                group = group,
             )
+            val widget = resized.widgets.singleOrNull { it.globalIndex == selected.globalIndex }
+                ?: return@operate resized
+            val visual = widget.visualBounds
+            val left = (widget.drawLeft + visual.left).coerceIn(0, snapshot.preview.width - visual.width)
+            val top = (widget.drawTop + visual.top).coerceIn(0, snapshot.preview.height - visual.height)
+            val x = left - visual.left - widget.originX - widget.drawOffsetX
+            val y = top - visual.top - widget.originY - widget.drawOffsetY
+            if (x == widget.x && y == widget.y) {
+                resized
+            } else {
+                repository.moveWidget(
+                    styleName = style,
+                    globalIndex = widget.globalIndex,
+                    widgetType = widget.type,
+                    sequenceId = widget.sequenceId,
+                    x = x,
+                    y = y,
+                    applyToAllStyles = applyToAllStyles,
+                    group = group,
+                )
+            }
         }
     }
 
@@ -1760,6 +1823,17 @@ class EditorViewModel @Inject constructor(
                 repository.recolorWidget(style, selected.globalIndex, selected.type,
                     selected.sequenceId, selected.x, selected.y, colorArgb, allStyles, group)
             }
+        }
+
+    }
+
+    /** Recolours every widget with a format-supported colour field in the selected variant. */
+    fun recolorAllWidgets(colorArgb: Int) {
+        val state = mutableState.value
+        if (state.isWorking || colorArgb ushr 24 != 0xFF) return
+        val snapshot = state.snapshot ?: return
+        operate {
+            repository.recolorAllWidgets(snapshot.selectedVariant.basename, colorArgb)
         }
     }
 

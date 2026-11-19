@@ -148,6 +148,28 @@ class WidgetColorTest {
         assertEquals(listOf(0xFFFF_FFFF.toInt(), red), after.map { it.colorArgb })
     }
 
+    @Test fun recolorAllWidgetsChangesOnlySupportedColorsInTheSelectedVariant() {
+        val source = container(
+            pair(index = 0),
+            pair(index = 1, sequence = 18, x = 40),
+            record(40, WIDGET_STATIC, 2, 0) {},
+        )
+
+        val edited = FaceEditor.recolorAllWidgets(source, listOf(style), red).container
+        val guides = FaceRecordParser.widgetGuides(edited.entryByBasename(style))
+
+        assertEquals(listOf(red, red, null), guides.map { it.colorArgb })
+        assertTrue(edited.validate().isValid)
+        assertArrayEquals(
+            source.entryByBasename("style1.bin").payload,
+            edited.entryByBasename("style1.bin").payload,
+        )
+        assertArrayEquals(
+            source.entryByBasename("aod.bin").payload,
+            edited.entryByBasename("aod.bin").payload,
+        )
+    }
+
     /** A colour is a property of a widget, not part of which widget it is. */
     @Test fun aRecolouredWidgetIsStillItsOriginal() {
         for (source in listOf(container(pair()), container(comp()), container(rule()), container(arc()))) {

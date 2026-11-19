@@ -23,6 +23,14 @@ How to write this changelog
 - The initial release is one line.
 -->
 
+## Unreleased
+
+Added:
+
+- **Fonts, Colors & Resize** creates static glyph artwork from bundled or imported fonts,
+  recolours supported widgets in the selected style, and resizes supported widgets while
+  keeping them inside the face.
+
 ## 0.3.0 (code `30`) — 2026-11-10
 
 Fixed:

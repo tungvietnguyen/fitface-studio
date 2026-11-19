@@ -51,8 +51,11 @@ any APK you build yourself: passing it on passes on the vendor's code with it.
 ### Runtime content
 
 **No watch-face content is bundled with this software or distributed by this repository.** No
-watch-face package, container, raster, font or preview image is bundled in the app
-or committed here, and `.gitignore` keeps it that way; the documentation
+watch-face package, container, raster, watch font program or preview image is bundled in the app
+or committed here, and `.gitignore` keeps downloaded face content that way. The app does bundle
+five open fonts under `app/src/main/assets/fonts/` for user-generated static PNG artwork; each
+font's SIL Open Font License is included beside it. These fonts do not replace the watch's
+firmware-provided live text. The documentation
 screenshots described below are captures of this app's own interface, not face
 assets. The app obtains each package by requesting it, at runtime and on the
 user's instruction, from the vendor's own store API over the hostnames named

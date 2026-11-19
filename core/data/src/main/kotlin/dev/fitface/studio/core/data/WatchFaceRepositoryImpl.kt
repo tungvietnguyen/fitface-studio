@@ -1969,6 +1969,29 @@ class WatchFaceRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun recolorAllWidgets(styleName: String, colorArgb: Int): EditorSnapshot =
+        withContext(Dispatchers.Default) {
+            mutex.withLock {
+                val current = requireSession()
+                val edit = FaceEditor.recolorAllWidgets(
+                    current.currentContainer,
+                    listOf(styleName),
+                    colorArgb,
+                )
+                commit(
+                    current,
+                    edit.container,
+                    EditAuditSummary(
+                        edit.changedPayloadBytes,
+                        edit.changedStyles,
+                        operation = "All recolourable widgets changed in $styleName",
+                    ),
+                    styleName,
+                    kind = EditKind.COLOUR,
+                )
+            }
+        }
+
     override suspend fun resetWidgetColor(
         styleName: String,
         globalIndex: Int,
@@ -2167,6 +2190,7 @@ class WatchFaceRepositoryImpl @Inject constructor(
         width: Int,
         height: Int,
         applyToAllStyles: Boolean,
+        group: Long?,
     ): EditorSnapshot = withContext(Dispatchers.Default) {
         mutex.withLock {
             val current = requireSession()
@@ -2202,6 +2226,7 @@ class WatchFaceRepositoryImpl @Inject constructor(
                 edit.audit("Widget resized " + editScope(styleName, applyToAllStyles)),
                 styleName,
                 kind = EditKind.RESIZE,
+                group = group,
             )
         }
     }

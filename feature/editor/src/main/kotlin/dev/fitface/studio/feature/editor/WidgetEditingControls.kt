@@ -32,15 +32,48 @@ import dev.fitface.studio.core.model.WidgetCategory
 import dev.fitface.studio.core.model.WidgetGuide
 import dev.fitface.studio.core.model.WidgetPlacement
 import dev.fitface.studio.core.model.WidgetRotationKind
+import dev.fitface.studio.core.model.WidgetSize
 import dev.fitface.studio.core.model.arrangementTarget
 import dev.fitface.studio.core.model.canRotateTo
 import dev.fitface.studio.core.model.normalizedRotation
+import dev.fitface.studio.core.model.rotationBounds
+import dev.fitface.studio.core.model.widgetResizeLadder
 import dev.fitface.studio.core.ui.FitButton
 import dev.fitface.studio.core.ui.FitButtonStyle
 import dev.fitface.studio.core.ui.FitHeading
 import dev.fitface.studio.core.ui.FitIconButton
 import dev.fitface.studio.core.ui.InfoText
 import dev.fitface.studio.core.ui.fitText
+
+/** Ladder rungs whose full drawn rectangle can be kept inside the actual face panel. */
+internal fun widgetResizeOptions(widget: WidgetGuide, panelWidth: Int, panelHeight: Int): List<WidgetSize> {
+    if (!widget.canResize || !widget.canEditPosition) return emptyList()
+    return widgetResizeLadder(widget.originalWidth, widget.originalHeight, widget.resizeKind).filter { size ->
+        val bounds = rotationBounds(
+            size.width,
+            size.height,
+            size.width / 2,
+            size.height / 2,
+            if (widget.rotationKind == WidgetRotationKind.TEXT) (widget.rotationTenths ?: 0) / 10.0 else 0.0,
+        )
+        bounds.width <= panelWidth && bounds.height <= panelHeight
+    }
+}
+
+internal fun nextWidgetSizeOnFace(
+    widget: WidgetGuide,
+    grow: Boolean,
+    panelWidth: Int,
+    panelHeight: Int,
+): WidgetSize? {
+    val currentArea = widget.width.toLong() * widget.height
+    val options = widgetResizeOptions(widget, panelWidth, panelHeight)
+    return if (grow) {
+        options.firstOrNull { it.area > currentArea }
+    } else {
+        options.lastOrNull { it.area < currentArea }
+    }
+}
 
 /** One tap of the rotate buttons, in tenths: a whole number of degrees for every kind. */
 internal const val RotationStepTenths = 150

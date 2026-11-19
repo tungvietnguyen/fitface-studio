@@ -150,7 +150,6 @@ import dev.fitface.studio.core.model.drawLeft
 import dev.fitface.studio.core.model.drawTop
 import dev.fitface.studio.core.model.isCustomFaceNumber
 import dev.fitface.studio.core.model.mebibytes
-import dev.fitface.studio.core.model.nextWidgetSize
 import dev.fitface.studio.core.model.tinted
 import dev.fitface.studio.core.model.visualBounds
 import dev.fitface.studio.core.model.visualOffsetX
@@ -338,7 +337,10 @@ fun EditorRoute(
         onBackgroundImported = viewModel::acceptBackgroundImport,
         onStylesDeleted = viewModel::acceptStyleDeletion,
         onResizeWidget = viewModel::resizeSelectedWidget,
+        onResizeWidgetToPercent = viewModel::resizeSelectedWidgetToPercent,
         onWidgetColor = viewModel::setSelectedWidgetColor,
+        onApplyColorToAll = viewModel::recolorAllWidgets,
+        onGeneratedPicture = viewModel::prepareGeneratedPicture,
         onRotateWidget = viewModel::rotateSelectedWidget,
         onArrangeWidget = viewModel::arrangeSelectedWidget,
         onSyncThumbnail = viewModel::refreshThumbnail,
@@ -465,7 +467,10 @@ private fun EditorScreen(
     onBackgroundImported: (EditorSnapshot) -> Unit,
     onStylesDeleted: (EditorSnapshot) -> Unit,
     onResizeWidget: (Boolean) -> Unit,
+    onResizeWidgetToPercent: (Int) -> Unit,
     onWidgetColor: (Int?, Long?) -> Unit,
+    onApplyColorToAll: (Int) -> Unit,
+    onGeneratedPicture: (File) -> Unit,
     onRotateWidget: (Int) -> Unit,
     onArrangeWidget: (dev.fitface.studio.core.model.WidgetArrangement) -> Unit,
     onSyncThumbnail: () -> Unit,
@@ -498,6 +503,7 @@ private fun EditorScreen(
     var page by rememberSaveable { mutableStateOf(EditorPage.Canvas) }
     var importing by rememberSaveable { mutableStateOf(false) }
     var importingBackground by rememberSaveable { mutableStateOf(false) }
+    var fontsWidgetsOpen by rememberSaveable { mutableStateOf(false) }
 
     val snapshot = state.snapshot
     // Two ways to delete styles. Manage styles is for recovering space, where several may
@@ -541,6 +547,26 @@ private fun EditorScreen(
     }
     val selected = snapshot?.widgets?.singleOrNull {
         it.globalIndex == state.selectedWidgetIndex
+    }
+    if (fontsWidgetsOpen && snapshot != null) {
+        FontWidgetsSheet(
+            snapshot = snapshot,
+            selected = selected,
+            enabled = !state.isWorking && state.multiSelection.isEmpty(),
+            onDismiss = { fontsWidgetsOpen = false },
+            onAddSprite = { file ->
+                fontsWidgetsOpen = false
+                onGeneratedPicture(file)
+            },
+            onSelectWidget = onWidget,
+            onWidgetColor = { color -> onWidgetColor(color, null) },
+            onApplyColorToAll = onApplyColorToAll,
+            onResize = onResizeWidgetToPercent,
+            onPlaceWidget = { widget, left, top ->
+                onPlaceWidget(widget.globalIndex, left, top)
+            },
+            onNudgeWidget = onNudgeWidget,
+        )
     }
     // No redirect any more: Install is one page, so there is nowhere to be quietly sent
     // instead. Arriving marks the preview reviewed, which is what arms the send button,
@@ -604,6 +630,11 @@ private fun EditorScreen(
                     onReportProblem = onReportProblem,
                     onAbout = onAbout,
                     onCheckForUpdate = onCheckForUpdate,
+                    onFontsWidgets = if (page == EditorPage.Canvas && selected != null) {
+                        { fontsWidgetsOpen = true }
+                    } else {
+                        null
+                    },
                 )
                 Box(
                     Modifier.fillMaxWidth().height(1.dp)
@@ -842,6 +873,7 @@ private fun EditorHeader(
     onReportProblem: () -> Unit,
     onAbout: () -> Unit,
     onCheckForUpdate: () -> Unit,
+    onFontsWidgets: (() -> Unit)?,
 ) {
     val title = when (page) {
         // The project's name, not the face's. Two projects on one face carry the same
@@ -945,6 +977,13 @@ private fun EditorHeader(
                 contentDescription = stringResource(R.string.editor_project_a11y),
                 onClick = onProject,
             )
+            onFontsWidgets?.let { open ->
+                FitIconButton(
+                    glyph = "Aa",
+                    contentDescription = stringResource(R.string.editor_fonts_widgets_button),
+                    onClick = open,
+                )
+            }
         }
         AppMenuAction(
             onReportProblem = onReportProblem,
@@ -1801,7 +1840,12 @@ private fun SelectionActionBar(
                 onClick = { onResize(false) },
                 modifier = Modifier.weight(1f),
                 enabled = enabled && widget.canResize &&
-                    nextWidgetSize(widget, grow = false) != null,
+                    nextWidgetSizeOnFace(
+                        widget,
+                        grow = false,
+                        panelWidth = snapshot.preview.width,
+                        panelHeight = snapshot.preview.height,
+                    ) != null,
             )
             FitIconButton(
                 glyph = "+",
@@ -1809,7 +1853,12 @@ private fun SelectionActionBar(
                 onClick = { onResize(true) },
                 modifier = Modifier.weight(1f),
                 enabled = enabled && widget.canResize &&
-                    nextWidgetSize(widget, grow = true) != null,
+                    nextWidgetSizeOnFace(
+                        widget,
+                        grow = true,
+                        panelWidth = snapshot.preview.width,
+                        panelHeight = snapshot.preview.height,
+                    ) != null,
             )
             // Disabled rather than hidden on a widget with no angle, like resize: Edit
             // widget says why, and a button that vanishes leaves the reader guessing.
@@ -2832,7 +2881,13 @@ private fun InspectorWorkspace(
         }
         // Enabled while a step saves, like the arrows: disabling it cancelled a held press
         // after its first step. The view model drops a step that arrives mid-save.
-        WidgetSizeControls(widget, enabled = true, onResize)
+        WidgetSizeControls(
+            widget,
+            snapshot.preview.width,
+            snapshot.preview.height,
+            enabled = true,
+            onResize = onResize,
+        )
         RotationControls(widget, !state.isWorking, onRotate)
         ColorControls(widget, !state.isWorking, onColor)
         ArrangementControls(widget, snapshot, !state.isWorking, onArrange)
@@ -3023,6 +3078,8 @@ private fun WidgetScope(
 @Composable
 private fun WidgetSizeControls(
     widget: WidgetGuide,
+    panelWidth: Int,
+    panelHeight: Int,
     enabled: Boolean,
     onResize: (Boolean) -> Unit,
 ) {
@@ -3039,8 +3096,8 @@ private fun WidgetSizeControls(
             else -> null
         },
         enabled = enabled,
-        canShrink = widget.canResize && nextWidgetSize(widget, grow = false) != null,
-        canGrow = widget.canResize && nextWidgetSize(widget, grow = true) != null,
+        canShrink = nextWidgetSizeOnFace(widget, grow = false, panelWidth = panelWidth, panelHeight = panelHeight) != null,
+        canGrow = nextWidgetSizeOnFace(widget, grow = true, panelWidth = panelWidth, panelHeight = panelHeight) != null,
         onStep = onResize,
         shrinkDescription = stringResource(R.string.editor_action_smaller_a11y),
         growDescription = stringResource(R.string.editor_action_larger_a11y),

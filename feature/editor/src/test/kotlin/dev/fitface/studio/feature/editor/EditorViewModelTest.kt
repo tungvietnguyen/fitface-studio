@@ -1467,7 +1467,7 @@ class EditorViewModelTest {
         val resizes = mutableListOf<Pair<Int, Int>>()
 
         override suspend fun resizeWidget(styleName: String, globalIndex: Int, widgetType: Int, sequenceId: Int,
-            x: Int, y: Int, width: Int, height: Int, applyToAllStyles: Boolean): EditorSnapshot {
+            x: Int, y: Int, width: Int, height: Int, applyToAllStyles: Boolean, group: Long?): EditorSnapshot {
             resizes += width to height
             if (!commitImmediately) gate.await()
             current = current.copy(widgets = current.widgets.map {

@@ -119,6 +119,8 @@ internal fun ColourPicker(
     commits: Boolean,
     onColour: (Int?) -> Unit,
     stateKey: Any?,
+    @StringRes heading: Int = R.string.editor_image_colour,
+    showOriginal: Boolean = true,
     /** How this colour works; behind the heading's ⓘ. */
     info: (@Composable ColumnScope.() -> Unit)? = null,
     details: @Composable () -> Unit = {},
@@ -146,20 +148,22 @@ internal fun ColourPicker(
         if (!commits) onColour(colour)
     }
     ControlCard(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        FitHeading(stringResource(R.string.editor_image_colour), key = stateKey, info = info)
+        FitHeading(stringResource(heading), key = stateKey, info = info)
         details()
-        FitChip(
-            stringResource(R.string.editor_image_colour_original),
-            selected = original,
-            // Enabled even when chosen, so it reads as chosen; choosing it again changes nothing.
-            onClick = {
-                if (!original) {
-                    if (!commits) show(null)
-                    onColour(null)
-                }
-            },
-            enabled = enabled,
-        )
+        if (showOriginal) {
+            FitChip(
+                stringResource(R.string.editor_image_colour_original),
+                selected = original,
+                // Enabled even when chosen, so it reads as chosen; choosing it again changes nothing.
+                onClick = {
+                    if (!original) {
+                        if (!commits) show(null)
+                        onColour(null)
+                    }
+                },
+                enabled = enabled,
+            )
+        }
         // Five 48dp targets need 240dp, inside even a 320dp phone's page.
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             WidgetColorPresets.forEach { (label, colour) ->

@@ -239,6 +239,41 @@ object FaceEditor {
     }
 
     /**
+     * Recolours every widget with a supported opaque colour word in the requested entries.
+     * Widgets without an allowlisted colour field or without an opaque word are preserved.
+     */
+    fun recolorAllWidgets(
+        source: Fit3Container,
+        entryBasenames: List<String>,
+        colorArgb: Int,
+    ): ContainerEdit {
+        requireEditable(source)
+        if (colorArgb ushr 24 != 0xFF) {
+            throw Fit3FormatException("widget colour must be opaque ARGB")
+        }
+        val entries = entryBasenames.map(source::entryByBasename)
+        val output = source.toByteArray()
+        val before = output.copyOf()
+        entries.forEach { entry ->
+            FaceRecordParser.scanWidgets(entry).forEach recordLoop@{ record ->
+                val model = WidgetSchema.spec(record.widgetType).color ?: return@recordLoop
+                val stored = record.colorWord?.takeIf { it.ushr(24) == 0xFFL } ?: return@recordLoop
+                val color = colorArgb.toLong() and 0xFFFF_FFFFL
+                (listOf(model.offset) + model.copies.filter { record.word(it) == stored }).forEach { field ->
+                    output.putU32(entry.offset + record.fieldOffset(field), color)
+                }
+            }
+        }
+        val changedEntries = entries.filter { entry ->
+            val start = entry.offset
+            (start until start + entry.size).any { before[it] != output[it] }
+        }
+        val changed = before.indices.count { before[it] != output[it] }
+        if (changed == 0) throw Fit3FormatException("No recolourable widgets would change colour")
+        return finalize(source, output, changedEntries, changed)
+    }
+
+    /**
      * Turns one widget to [angleTenths] in the first entry of [entryBasenames], and in
      * every later entry that carries it — a same-size field patch for each of the three
      * [WidgetSchema.RotationModel]s.

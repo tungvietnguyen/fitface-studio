@@ -68,6 +68,14 @@ The canvas is reconstructed from the current container, not from the stock pictu
   formatting program, colour, spacing and text alignment. The glyphs are in watch ROM,
   **not in the package**: `WidgetTextRasterizer` substitutes Android fonts at the
   requested pixel size. Resizing the label box does not scale that font.
+- **Fonts, Colors & Resize** renders the five bundled or a user-picked TTF/OTF face as
+  transparent, equal-cell glyph artwork for digits, separators and Latin letters. Imported
+  font files stay in app-private storage; the generated picture is what the project saves.
+  The container cannot carry a font program or replace firmware-generated time, date or
+  sensor text. The sheet offers font, color and resize/alignment tabs with a layer selector.
+  Supported widget colour fields can be recoloured together in the selected variant; raster
+  artwork is left unchanged. Widget resizing stays on the original-based 5% ladder, preserves
+  proportions and keeps the resized bounds on the 256 × 402 panel.
 - Vector arcs and rules use their stored geometry, thickness and colour. Image arcs
   and bars mask their native-size raster with the sampled progress geometry.
 - Reserved types 8/10/11/12/14/15 are inert, as on the firmware. Type 9's firmware-only
@@ -120,6 +128,7 @@ comparison locally. The test never writes to the corpus.
 | `filesDir/catalog-cache/catalog.json` | The catalogue, 7 day TTL, always rendered first on launch |
 | `filesDir/catalog-cache/uneditable.json` | App IDs whose package carries no container |
 | `filesDir/catalog-cache/packages/<appId>@<versionCode>.apk` | Downloaded packages; older versions evicted |
+| `filesDir/imported-fonts/<name>--<id>.ttf/.otf` | User-picked font files retained app-privately for generating static artwork |
 | `filesDir/projects/<id>/source.apk` | The package a project was opened from |
 | `filesDir/projects/<id>/edited.bin` | Legacy edited container, read for backward compatibility |
 | `filesDir/projects/<id>/session.json` | Legacy session state beside `edited.bin` (its removed records are read and ignored) |

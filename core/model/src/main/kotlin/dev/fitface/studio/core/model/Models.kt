@@ -1463,6 +1463,10 @@ interface WatchFaceRepository {
         group: Long? = null,
     ): EditorSnapshot
 
+    /** Recolours all widgets whose stored colour fields are supported in one variant. */
+    suspend fun recolorAllWidgets(styleName: String, colorArgb: Int): EditorSnapshot =
+        throw UnsupportedOperationException("Bulk widget recolouring is unavailable")
+
     /**
      * Returns the widget to the colour it shipped with in **each** style it is edited in,
      * not the selected style's colour everywhere: styles often differ only in colour.
@@ -1518,6 +1522,7 @@ interface WatchFaceRepository {
         width: Int,
         height: Int,
         applyToAllStyles: Boolean,
+        group: Long? = null,
     ): EditorSnapshot
 
     /**
